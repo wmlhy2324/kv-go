@@ -6,14 +6,37 @@ import (
 	"kv-go/bitcask/data"
 )
 
-// indexer 后续如果想接入其他数据结构，则直接实现这个接口就可以了
+// Indexer indexer 后续如果想接入其他数据结构，则直接实现这个接口就可以了
 type Indexer interface {
-	//Put向索引中储存key对应数据的位置信息
-	Put(key []byte, pos *data.LogRecordPos)
-	//Get根据key取出对应索引的信息
+	// Put Put向索引中储存key对应数据的位置信息
+	Put(key []byte, pos *data.LogRecordPos) bool
+	// Get Get根据key取出对应索引的信息
 	Get(key []byte) *data.LogRecordPos //拿到索引的位置信息
-	//根据key删除索引对应的位置信息
+	// Delete 根据key删除索引对应的位置信息
 	Delete(key []byte) bool
+}
+
+type IndexType = int8
+
+const (
+	//Btree索引
+	BTree IndexType = iota + 1
+
+	//自适应基数树
+	ART
+)
+
+func NewIndexer(typ IndexType) Indexer {
+	switch typ {
+	case BTree:
+		return NewBtree()
+	case ART:
+		//todo
+		return nil
+	default:
+		panic("unknown index type")
+	}
+
 }
 
 type Item struct {

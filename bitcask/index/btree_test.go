@@ -42,5 +42,26 @@ func TestBTree_Get(t *testing.T) {
 	})
 	assert.True(t, res3)
 	post2 := bt.Get([]byte("a"))
+	assert.Equal(t, uint32(2), post2.Fid)
+	assert.Equal(t, int64(3), post2.Offset)
+
 	t.Log(post2)
+}
+func TestBTree_Delete(t *testing.T) {
+	bt := NewBtree()
+	res1 := bt.Put(nil, &data.LogRecordPos{
+		Fid:    1,
+		Offset: 100,
+	})
+	assert.True(t, res1)
+	res2 := bt.Delete(nil)
+	assert.True(t, res2)
+
+	res3 := bt.Put([]byte("a"), &data.LogRecordPos{
+		Fid:    22,
+		Offset: 33,
+	})
+	assert.True(t, res3)
+	res4 := bt.Delete([]byte("a"))
+	assert.True(t, res4)
 }
