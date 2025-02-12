@@ -79,6 +79,34 @@ func (db *DB) Put(key []byte, value []byte) error {
 	return nil
 }
 
+func (db *DB) Delete(key []byte) error {
+	//先判断用户传递过来的key
+	if len(key) == 0 {
+		return ErrKeyIsEmpty
+	}
+
+	//先检查key是否存在，如果不存在的话就直接返回
+	if pos := db.index.Get(key); pos == nil {
+		return nil
+	}
+	//构造LogRecord,标识其是被删除的
+	logRecord := data.LogRecord{
+		Key:  key,
+		Type: data.LogRecordDelete,
+	}
+	//写入到数据文件里面
+	_, err := db.appendLogRecord(&logRecord)
+	if err != nil {
+		return err
+	}
+	//从内存索引中删除掉
+	ok := db.index.Delete(key)
+	if !ok {
+		return ErrIndexUpdateFailed
+	}
+	return nil
+}
+
 // 根据key读取文件
 func (db *DB) Get(key []byte) ([]byte, error) {
 	db.mu.RLock()
@@ -258,10 +286,14 @@ func (db *DB) loadIndexFromDateFiles() error {
 				Fid:    fileId,
 				Offset: offset,
 			}
+			var ok bool
 			if logRecord.Type == data.LogRecordDelete {
-				db.index.Delete(logRecord.Key)
+				ok = db.index.Delete(logRecord.Key)
 			} else {
-				db.index.Put(logRecord.Key, logRecordPos)
+				ok = db.index.Put(logRecord.Key, logRecordPos)
+			}
+			if !ok {
+				return ErrIndexUpdateFailed
 			}
 			//递增offset，下次从新位置开始读取
 			offset += size
