@@ -24,13 +24,13 @@ type DataFile struct {
 
 func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 
-	fileName := filepath.Join(fmt.Sprintf("%09d", fileId) + DataFileNameSuffix)
+	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
 	//初始化iomanager管理器接口
 	ioManager, err := fio.NewFileIOManager(fileName)
 	if err != nil {
 		return nil, err
 	}
-	//为什么偏移量为0
+	//为什么偏移量为0,初始化所以为0吗
 	return &DataFile{
 		FileId:    fileId,
 		WriteOff:  0,
@@ -39,14 +39,27 @@ func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
 
 }
 
-// 根据offset从数据文件中读取logrecord
+// 根据offset从数据文件中读取logrecord,这里io重复操作，待优化
 func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	//读取header信息
-	HeaderBuf, err := df.readNBytes(maxLogRecordHeaderSize, offset)
+
+	//拿到当前文件的一个大小
+	fileSize, err := df.IoManager.Size()
 	if err != nil {
 		return nil, 0, err
 	}
-	header, headerSize := decodeLogRecord(HeaderBuf)
+	var headerBytes int64 = maxLogRecordHeaderSize
+	//如果读取的最大header长度已经超过了文件长度，只需要读取到文件末尾
+
+	if offset+maxLogRecordHeaderSize > fileSize {
+		headerBytes = fileSize - offset
+	}
+	//读取header信息
+	HeaderBuf, err := df.readNBytes(headerBytes, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	//这里解码应该会把不需要的部分给删掉才对(已解决)
+	header, headerSize := decodeLogRecordHeader(HeaderBuf)
 	//读取到了文件末尾
 	if header == nil {
 		return nil, 0, io.EOF
@@ -72,7 +85,7 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 	}
 	//最后校验数据的crc是否正确
 	//? 把不需要的长度截取掉
-	crc := getLogRecordCRC(logRecord, HeaderBuf[crc32.Size:headerSize])
+	crc := getLogRecordCRC(logRecord, HeaderBuf[crc32.Size:headerSize]) //这里有疑问
 	if crc != header.crc {
 		return nil, 0, ErrInvalidCRC
 	}
@@ -81,14 +94,22 @@ func (df *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 
 // 非文件怎么sync呢
 func (df *DataFile) Sync() error {
-	return nil
+	return df.IoManager.Sync()
 }
 func (df *DataFile) Write(buf []byte) error {
+	n, err := df.IoManager.Write(buf)
+	if err != nil {
+		return err
+	}
+	df.WriteOff += int64(n)
 	return nil
 }
-
+func (df *DataFile) Close() error {
+	return df.IoManager.Close()
+}
 func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	b = make([]byte, n)
+	//从数据源的哪个位置开始读取
 	_, err = df.IoManager.Read(b, offset)
 	return b, err
 

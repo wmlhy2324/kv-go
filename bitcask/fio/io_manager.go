@@ -13,10 +13,21 @@ type IOManager interface {
 	Sync() error
 	//关闭文件
 	Close() error
+	//Size 获取到文件大小
+	Size() (int64, error)
 }
 
 // 初始化IOManager 目前支持标准FileIO
 func NewIOManager(fileName string) (IOManager, error) {
 
 	return NewFileIOManager(fileName)
+}
+
+func (fio *FileIO) Size() (int64, error) {
+
+	stat, err := fio.fd.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return stat.Size(), nil
 }
