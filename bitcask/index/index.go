@@ -48,3 +48,27 @@ func (ai *Item) Less(bi btree.Item) bool {
 	//使用了接口断言,使用指针避免拷贝大对象
 	return bytes.Compare(ai.key, bi.(*Item).key) == -1
 }
+
+// 通用的索引迭代器，这里定义一个接口的原因是如果有其他数据类型，这里可以直接调用
+type Iterator interface {
+	//重新回到的迭代器的起点,就是第一个数据
+	Rewind()
+
+	//根据传入的key查到到第一个大于或者小于等于目标的eky，从这个key开始遍历
+	Seek(key []byte)
+
+	//跳转到下一个key
+	Next()
+
+	//表示遍历完了所有的key，用于退出遍历
+	Valid() bool
+
+	//当前遍历位置的key数据
+	Key() []byte
+
+	//当前遍历位置的value数据
+	Value() *data.LogRecordPos
+
+	//关闭迭代器，释放相应资源
+	Close()
+}
