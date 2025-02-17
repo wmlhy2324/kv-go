@@ -19,7 +19,7 @@ type DB struct {
 	mu         *sync.RWMutex
 	activeFile *data.DataFile            //当前活跃文件
 	olderFiles map[uint32]*data.DataFile //旧文件，只用于读
-	index      index.Indexer             //内存索引
+	index      index.Indexer             //内存索引,btree是其中一个
 }
 
 // 打开存储引擎实例
@@ -53,6 +53,37 @@ func Open(options Options) (*DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// 关闭数据库
+func (db *DB) Close() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	//关闭当前活跃文件
+	if err := db.activeFile.Close(); err != nil {
+		return err
+	}
+	//关闭旧的数据文件
+	for _, file := range db.olderFiles {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// 持久化数据文件
+func (db *DB) Sync() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	//持久化当前的一个活跃文件
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.activeFile.Sync()
 }
 
 // 写入key/value
@@ -107,6 +138,41 @@ func (db *DB) Delete(key []byte) error {
 	return nil
 }
 
+// 从数据库中获取所有的key
+func (db *DB) ListKeys() [][]byte {
+
+	iterator := db.index.Iterator(false)
+
+	keys := make([][]byte, db.index.Size())
+
+	var idx int
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		keys[idx] = iterator.Key()
+		idx++
+	}
+	return keys
+
+}
+
+// 获取所有的数据，并执行用户指定的操作，这里的key和value是不需要指定的
+func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
+
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	iterator := db.index.Iterator(false)
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		value, err := db.getValueByPosition(iterator.Value())
+		if err != nil {
+			return err
+		}
+		//执行用户给的方法,函数返回false时停止
+		if !fn(iterator.Key(), value) {
+			break
+		}
+	}
+	return nil
+}
+
 // 根据key读取文件
 func (db *DB) Get(key []byte) ([]byte, error) {
 	db.mu.RLock()
@@ -122,19 +188,46 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 		return nil, ErrKeyNotFound
 	}
 
+	////根据文件的id找到对应的数据文件,如果是活跃文件就用活跃文件，否则去旧文件里面寻找
+	//var dataFile *data.DataFile
+	//if db.activeFile.FileId == logRecordPos.Fid {
+	//	dataFile = db.activeFile
+	//} else {
+	//	dataFile = db.olderFiles[logRecordPos.Fid]
+	//}
+	//if dataFile == nil {
+	//	return nil, ErrKeyNotFound
+	//}
+	//
+	////找到了对应的数据文件，根据偏移量读取我们的数据
+	//logRecord, _, err := dataFile.ReadLogRecord(logRecordPos.Offset)
+	//if err != nil {
+	//	return nil, err
+	//}
+	////判断logRecord的类型
+	//if logRecord.Type == data.LogRecordDelete {
+	//	return nil, ErrKeyNotFound
+	//}
+	////实际返回数据
+
+	//从数据文件中获取value
+	return db.getValueByPosition(logRecordPos)
+}
+
+func (db *DB) getValueByPosition(pos *data.LogRecordPos) ([]byte, error) {
 	//根据文件的id找到对应的数据文件,如果是活跃文件就用活跃文件，否则去旧文件里面寻找
 	var dataFile *data.DataFile
-	if db.activeFile.FileId == logRecordPos.Fid {
+	if db.activeFile.FileId == pos.Fid {
 		dataFile = db.activeFile
 	} else {
-		dataFile = db.olderFiles[logRecordPos.Fid]
+		dataFile = db.olderFiles[pos.Fid]
 	}
 	if dataFile == nil {
 		return nil, ErrKeyNotFound
 	}
 
 	//找到了对应的数据文件，根据偏移量读取我们的数据
-	logRecord, _, err := dataFile.ReadLogRecord(logRecordPos.Offset)
+	logRecord, _, err := dataFile.ReadLogRecord(pos.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +336,7 @@ func (db *DB) loadDataFiles() error {
 		if err != nil {
 			return err
 		}
+		//存储文件id对应的文件信息
 		if i == len(fileIds)-1 {
 			//最后一个，id是最大的，说明是当前的活跃文件
 			db.activeFile = dataFile
@@ -274,6 +368,7 @@ func (db *DB) loadIndexFromDateFiles() error {
 		var offset int64
 		for {
 			logRecord, size, err := dataFile.ReadLogRecord(offset)
+			//读到了文件末尾
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -298,7 +393,7 @@ func (db *DB) loadIndexFromDateFiles() error {
 			//递增offset，下次从新位置开始读取
 			offset += size
 		}
-		//如果当前是活跃文件，下一次从新的位置开始读取
+		//如果当前是活跃文件，下一次从新的位置开始读写
 		if i == len(db.fileIds)-1 {
 			db.activeFile.WriteOff = offset
 		}
@@ -315,3 +410,5 @@ func checkOptions(options Options) error {
 	}
 	return nil
 }
+
+// ListKeys 获取数据库中所有的 key (待修改)

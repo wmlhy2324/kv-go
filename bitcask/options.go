@@ -24,3 +24,14 @@ var DefaultOptions = Options{
 	SyncWrites:   false,
 	IndexType:    BTree,
 }
+
+// 索引迭代器配置项
+type IteratorOptions struct {
+	Prefix  []byte //遍历前缀为指定的key值
+	Reverse bool
+}
+
+var DefaultIteratorOptions = IteratorOptions{
+	Prefix:  nil,
+	Reverse: false,
+}

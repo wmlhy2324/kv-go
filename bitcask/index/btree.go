@@ -1,8 +1,10 @@
 package index
 
 import (
+	"bytes"
 	"github.com/google/btree"
 	"kv-go/bitcask/data"
+	"sort"
 
 	"sync"
 )
@@ -51,6 +53,18 @@ func (bt *Btree) Delete(key []byte) bool {
 	return true
 
 }
+func (bt *Btree) Iterator(reverse bool) Iterator {
+	if bt.tree == nil {
+		return nil
+	}
+	bt.lock.RLock()
+	defer bt.lock.RUnlock()
+
+	return newBtreeIterator(bt.tree, reverse)
+}
+func (bt *Btree) Size() int {
+	return bt.tree.Len()
+}
 
 // btree索引迭代器，学习每个数据的用处
 type btreeIterator struct {
@@ -63,10 +77,12 @@ type btreeIterator struct {
 	value []*Item //key+位置索引信息
 }
 
+// 这里的迭代器没有面向用户
 func newBtreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 	var idx int
 	value := make([]*Item, tree.Len())
 
+	//将所有的数据存放到数组中
 	saveValues := func(it btree.Item) bool {
 
 		value[idx] = it.(*Item)
@@ -78,37 +94,54 @@ func newBtreeIterator(tree *btree.BTree, reverse bool) *btreeIterator {
 	} else {
 		tree.Ascend(saveValues)
 	}
-	return &btreeIterator{}
+	return &btreeIterator{
+		currIndex: 0,
+		reverse:   reverse,
+		value:     value,
+	}
 }
 func (bti *btreeIterator) Rewind() {
+	bti.currIndex = 0
 
 }
 
 // Seek 根据传入的 key 查找到第一个大于（或小于）等于的目标 key，根据从这个 key 开始遍历
 func (bti *btreeIterator) Seek(key []byte) {
+	//二分查找
+	if bti.reverse {
+		bti.currIndex = sort.Search(len(bti.value), func(i int) bool {
+			return bytes.Compare(bti.value[i].key, key) <= 0
+		})
+	} else {
+		bti.currIndex = sort.Search(len(bti.value), func(i int) bool {
+			return bytes.Compare(bti.value[i].key, key) >= 0
+		})
+	}
 }
 
 // Next 跳转到下一个 key
 func (bti *btreeIterator) Next() {
+	bti.currIndex += 1
 
-	return
 }
 
 // Valid 是否有效，即是否已经遍历完了所有的 key，用于退出遍历
 func (bti *btreeIterator) Valid() bool {
-	return false
+
+	return bti.currIndex < len(bti.value)
 }
 
 // Key 当前遍历位置的 Key 数据
 func (bti *btreeIterator) Key() []byte {
-	return nil
+	return bti.value[bti.currIndex].key
 }
 
 // Value 当前遍历位置的 Value 数据
 func (bti *btreeIterator) Value() *data.LogRecordPos {
-	return nil
+	return bti.value[bti.currIndex].pos
 }
 
 // Close 关闭迭代器，释放相应资源
 func (bti *btreeIterator) Close() {
+	bti.value = nil
 }

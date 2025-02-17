@@ -14,6 +14,12 @@ type Indexer interface {
 	Get(key []byte) *data.LogRecordPos //拿到索引的位置信息
 	// Delete 根据key删除索引对应的位置信息
 	Delete(key []byte) bool
+
+	//索引迭代器
+	Iterator(reverse bool) Iterator
+
+	//索引中存在的数据量
+	Size() int
 }
 
 type IndexType = int8

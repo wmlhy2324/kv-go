@@ -65,3 +65,49 @@ func TestBTree_Delete(t *testing.T) {
 	res4 := bt.Delete([]byte("a"))
 	assert.True(t, res4)
 }
+func TestBTree_Range(t *testing.T) {
+	bt1 := NewBtree()
+	//btree为空的情况
+	iter1 := bt1.Iterator(false)
+
+	assert.Equal(t, false, iter1.Valid())
+
+	//btree有数据的情况
+	bt1.Put([]byte("a"), &data.LogRecordPos{
+		Fid:    1,
+		Offset: 10,
+	})
+	iter2 := bt1.Iterator(false)
+	assert.Equal(t, true, iter2.Valid())
+	t.Log(iter2.Key())
+	t.Log(iter2.Value())
+	iter2.Next()
+	assert.Equal(t, false, iter2.Valid())
+	//有多条数据
+	bt1.Put([]byte("b"), &data.LogRecordPos{
+		Fid:    1,
+		Offset: 20,
+	})
+	bt1.Put([]byte("c"), &data.LogRecordPos{
+		Fid:    1,
+		Offset: 30,
+	})
+	bt1.Put([]byte("d"), &data.LogRecordPos{
+		Fid:    1,
+		Offset: 40,
+	})
+	iter3 := bt1.Iterator(false)
+	//可以加上断言
+	for iter3.Rewind(); iter3.Valid(); iter3.Next() {
+		t.Log("key = ", string(iter3.Key()))
+		t.Log(iter3.Value())
+	}
+
+	//测试seek，close
+
+	iter5 := bt1.Iterator(false)
+	iter5.Seek([]byte("b"))
+	for iter5.Seek([]byte("b")); iter5.Valid(); iter5.Next() {
+		t.Log("key = ", string(iter5.Key()))
+	}
+}
