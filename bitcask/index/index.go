@@ -9,17 +9,19 @@ import (
 // Indexer indexer 后续如果想接入其他数据结构，则直接实现这个接口就可以了
 type Indexer interface {
 	// Put Put向索引中储存key对应数据的位置信息
-	Put(key []byte, pos *data.LogRecordPos) bool
+	Put(key []byte, pos *data.LogRecordPos) *data.LogRecordPos
 	// Get Get根据key取出对应索引的信息
 	Get(key []byte) *data.LogRecordPos //拿到索引的位置信息
 	// Delete 根据key删除索引对应的位置信息
-	Delete(key []byte) bool
+	Delete(key []byte) (*data.LogRecordPos, bool)
 
 	//索引迭代器
 	Iterator(reverse bool) Iterator
 
 	//索引中存在的数据量
 	Size() int
+	//关闭索引迭代器(b树和基数树是不需要的)
+	Close() error
 }
 
 type IndexType = int8
@@ -30,15 +32,21 @@ const (
 
 	//自适应基数树
 	ART
+
+	//b+树
+	BPTree
 )
 
-func NewIndexer(typ IndexType) Indexer {
+func NewIndexer(typ IndexType, dirPath string, sync bool) Indexer {
 	switch typ {
 	case BTree:
 		return NewBtree()
 	case ART:
 		//todo
-		return nil
+		return NewART()
+	case BPTree:
+		return NewBPlusTree(dirPath, sync)
+
 	default:
 		panic("unknown index type")
 	}

@@ -22,14 +22,17 @@ func NewBtree() *Btree {
 		lock: new(sync.RWMutex),
 	}
 }
-func (bt *Btree) Put(key []byte, pos *data.LogRecordPos) bool {
+func (bt *Btree) Put(key []byte, pos *data.LogRecordPos) *data.LogRecordPos {
 	it := Item{key: key, pos: pos}
 	bt.lock.Lock()
-	bt.tree.ReplaceOrInsert(&it) //ReplaceOrInsert 方法：这是 btree 包提供的标准方法，用于插入或更新键值对。
+	oldItem := bt.tree.ReplaceOrInsert(&it) //ReplaceOrInsert 方法：这是 btree 包提供的标准方法，用于插入或更新键值对。
 	//如果二叉树中已经存在相同的键，则替换其对应的值。
 	//如果键不存在，则插入新的键值对
 	bt.lock.Unlock()
-	return true
+	if oldItem == nil {
+		return nil
+	}
+	return oldItem.(*Item).pos
 
 }
 func (bt *Btree) Get(key []byte) *data.LogRecordPos {
@@ -42,15 +45,15 @@ func (bt *Btree) Get(key []byte) *data.LogRecordPos {
 	}
 	return btreeItem.(*Item).pos
 } //拿到索引的位置信息
-func (bt *Btree) Delete(key []byte) bool {
+func (bt *Btree) Delete(key []byte) (*data.LogRecordPos, bool) {
 	it := &Item{key: key}
 	bt.lock.Lock()
 	oldItem := bt.tree.Delete(it)
 	bt.lock.Unlock()
 	if oldItem == nil {
-		return false
+		return nil, false
 	}
-	return true
+	return oldItem.(*Item).pos, true
 
 }
 func (bt *Btree) Iterator(reverse bool) Iterator {
@@ -64,6 +67,9 @@ func (bt *Btree) Iterator(reverse bool) Iterator {
 }
 func (bt *Btree) Size() int {
 	return bt.tree.Len()
+}
+func (bt *Btree) Close() error {
+	return nil
 }
 
 // btree索引迭代器，学习每个数据的用处

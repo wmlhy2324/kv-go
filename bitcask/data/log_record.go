@@ -10,6 +10,7 @@ type LogRecordType = byte
 const (
 	LogRecordNormal LogRecordType = iota
 	LogRecordDelete
+	LogRecordTxnFinished
 )
 
 //crc type keySize valueSize
@@ -37,6 +38,8 @@ type LogRecordPos struct {
 	Fid uint32
 	//偏移量,文件的哪个位置
 	Offset int64
+	//在磁盘中的大小
+	Size uint32
 }
 
 // EncodeLogRecord 对 LogRecord 进行编码，返回字节数组及长度
@@ -95,6 +98,30 @@ func decodeLogRecordHeader(buf []byte) (*logRecordHeader, int64) {
 	return header, int64(index)
 }
 
+// 对位置信息进行编码
+func EncodeLogRecordPos(pos *LogRecordPos) []byte {
+	buf := make([]byte, binary.MaxVarintLen32+binary.MaxVarintLen64)
+	var index = 0
+	index += binary.PutVarint(buf[index:], int64(pos.Fid))
+	index += binary.PutVarint(buf[index:], pos.Offset)
+	index += binary.PutVarint(buf[index:], int64(pos.Size))
+	return buf[:index]
+}
+
+// 解码
+func DecodeLogRecordPos(buf []byte) *LogRecordPos {
+	var index = 0
+	fileId, n := binary.Varint(buf[index:])
+	index += n
+	offset, n := binary.Varint(buf[index:])
+	index += n
+	size, n := binary.Varint(buf[index:])
+	return &LogRecordPos{
+		Fid:    uint32(fileId),
+		Offset: offset,
+		Size:   uint32(size),
+	}
+}
 func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
 	if lr == nil {
 		return 0
@@ -104,4 +131,10 @@ func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
 	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
 
 	return crc
+}
+
+// 暂存事务相关的数据
+type TransactionRecord struct {
+	Record *LogRecord
+	Pos    *LogRecordPos
 }

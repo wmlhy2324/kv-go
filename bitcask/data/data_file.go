@@ -13,7 +13,12 @@ var (
 	ErrInvalidCRC = errors.New("invalid CRC")
 )
 
-const DataFileNameSuffix = ".data"
+const (
+	DataFileNameSuffix = ".data"
+	HintFileName       = "hint-index"
+	MergeFinishName    = "merge-finished"
+	SeqNoFileName      = "seq-no"
+)
 
 // 数据文件
 type DataFile struct {
@@ -22,21 +27,44 @@ type DataFile struct {
 	IoManager fio.IOManager //io读写
 }
 
-func OpenDataFile(dirPath string, fileId uint32) (*DataFile, error) {
+func OpenDataFile(dirPath string, fileId uint32, ioType fio.FileIOType) (*DataFile, error) {
 
-	fileName := filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+	fileName := GetDataFileName(dirPath, fileId)
+	return newDataFile(fileName, fileId, ioType)
+
+}
+
+// 为什么这里hint文件的id是0
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, HintFileName)
+	return newDataFile(fileName, 0, fio.StandardFIO)
+}
+func newDataFile(fileName string, fileId uint32, ioType fio.FileIOType) (*DataFile, error) {
 	//初始化iomanager管理器接口
-	ioManager, err := fio.NewFileIOManager(fileName)
+	ioManager, err := fio.NewIOManager(fileName, ioType)
 	if err != nil {
 		return nil, err
 	}
-	//为什么偏移量为0,初始化所以为0吗
+	//偏移量为0
 	return &DataFile{
 		FileId:    fileId,
 		WriteOff:  0,
 		IoManager: ioManager,
 	}, nil
+}
+func OpenMergeFinishFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, MergeFinishName)
+	return newDataFile(fileName, 0, fio.StandardFIO)
+}
 
+// 存储事务序列号的文件
+func OpenSeqNoFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, SeqNoFileName)
+	return newDataFile(fileName, 0, fio.StandardFIO)
+
+}
+func GetDataFileName(dirPath string, fileId uint32) string {
+	return filepath.Join(dirPath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
 }
 
 // 根据offset从数据文件中读取logrecord,这里io重复操作，待优化
@@ -104,6 +132,16 @@ func (df *DataFile) Write(buf []byte) error {
 	df.WriteOff += int64(n)
 	return nil
 }
+
+// 写入索引信息到hint文件里面
+func (df *DataFile) WriteHintRecord(key []byte, pos *LogRecordPos) error {
+	record := &LogRecord{
+		Key:   key,
+		Value: EncodeLogRecordPos(pos),
+	}
+	EncodeLogRecord, _ := EncodeLogRecord(record)
+	return df.Write(EncodeLogRecord)
+}
 func (df *DataFile) Close() error {
 	return df.IoManager.Close()
 }
@@ -113,4 +151,15 @@ func (df *DataFile) readNBytes(n int64, offset int64) (b []byte, err error) {
 	_, err = df.IoManager.Read(b, offset)
 	return b, err
 
+}
+func (df *DataFile) SetIOManager(dirPath string, ioType fio.FileIOType) error {
+	if err := df.IoManager.Close(); err != nil {
+		return err
+	}
+	ioManager, err := fio.NewIOManager(GetDataFileName(dirPath, df.FileId), ioType)
+	if err != nil {
+		return err
+	}
+	df.IoManager = ioManager
+	return nil
 }
