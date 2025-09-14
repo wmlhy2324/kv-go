@@ -37,6 +37,8 @@ func (db *DB) NewWriteBatch(opts WriteBatchOptions) *Writebatch {
 
 }
 
+// 把记录存在原子写的一个map里面
+// 通过原子操作获取序列号
 // 批量写数据
 func (wb *Writebatch) Put(key, value []byte) error {
 	if len(key) == 0 {

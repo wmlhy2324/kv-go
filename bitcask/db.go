@@ -207,6 +207,12 @@ func (db *DB) Stat() *Stat {
 		DisSize:     dirSize, //todo
 	}
 }
+func (db *DB) Backup(dir string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	//文件锁的路径排除掉
+	return utils.CopyDir(db.Options.DirPath, dir, []string{fileLockName})
+}
 
 // 写入key/value
 func (db *DB) Put(key []byte, value []byte) error {
@@ -522,6 +528,7 @@ func (db *DB) loadIndexFromDateFiles() error {
 		var oldPos *data.LogRecordPos
 		if typ == data.LogRecordDelete {
 			oldPos, _ = db.index.Delete(key)
+			//无效的数据
 			db.reclaimSize += int64(pos.Size)
 		} else {
 			oldPos = db.index.Put(key, pos)

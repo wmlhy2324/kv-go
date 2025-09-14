@@ -70,7 +70,7 @@ func (db *DB) Merge() error {
 		db.mu.Unlock()
 		return err
 	}
-	//记录最近没有参与merge的文件
+	//记录新没有参与merge的文件
 	nonMergeFileId := db.activeFile.FileId
 	//现在需要merge的文件都是旧的数据文件了
 	//取出所有需要merge的文件
@@ -103,7 +103,7 @@ func (db *DB) Merge() error {
 	if err != nil {
 		return err
 	}
-	//打开hint文件存储索引
+	//打开hint文件存储索引,创建了一个id为0的标准文件io
 	hintFile, err := data.OpenHintFile(mergePath)
 	if err != nil {
 		return err
@@ -150,7 +150,7 @@ func (db *DB) Merge() error {
 		return err
 	}
 
-	//增加一个标识merge完成,创建了新文件标志着merge完成
+	//增加一个标识merge完成,创建了新文件标志着merge完成,在当前目录创建merge完成文件
 	mergeFinishedFile, err := data.OpenMergeFinishFile(mergePath)
 	if err != nil {
 		return err

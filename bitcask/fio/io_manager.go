@@ -30,15 +30,18 @@ type IOManager interface {
 func NewIOManager(fileName string, ioType FileIOType) (IOManager, error) {
 
 	switch ioType {
+	//标准文件io
 	case StandardFIO:
+
 		return NewFileIOManager(fileName)
+		//内存映射io
+
 	case MemoryMap:
 		return NewMMapIOManager(fileName)
 	default:
 		panic("unsupported io type")
 	}
 
-	return NewFileIOManager(fileName)
 }
 
 func (fio *FileIO) Size() (int64, error) {

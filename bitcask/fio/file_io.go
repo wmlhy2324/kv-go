@@ -9,7 +9,7 @@ type FileIO struct {
 }
 
 func NewFileIOManager(fileName string) (*FileIO, error) {
-
+	//返回了一个文件描述符
 	fd, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR|os.O_APPEND, DataFilePerm)
 	if err != nil {
 		return nil, err

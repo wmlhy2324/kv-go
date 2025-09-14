@@ -126,6 +126,7 @@ func getLogRecordCRC(lr *LogRecord, header []byte) uint32 {
 	if lr == nil {
 		return 0
 	}
+
 	crc := crc32.ChecksumIEEE(header[:])
 	crc = crc32.Update(crc, crc32.IEEETable, lr.Key)
 	crc = crc32.Update(crc, crc32.IEEETable, lr.Value)
